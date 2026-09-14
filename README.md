@@ -38,6 +38,136 @@ Staff and administrators log in, then use a sidebar-navigated dashboard to:
 - Confirmation dialogs before every delete, and success/error dialogs after
   every create/update/delete
 
+## Getting Started (Setup Guide)
+
+Follow these steps in order for a first-time setup. This assumes Windows with
+XAMPP, but the Linux/macOS equivalents are noted where they differ.
+
+### Prerequisites
+
+- **JDK 17 or newer** (any recent JDK works; this project was built/tested on
+  JDK 26). Check with:
+
+  ```powershell
+  java -version
+  javac -version
+  ```
+
+- **MySQL Server**, running and reachable. The easiest option on Windows is
+  [XAMPP](https://www.apachefriends.org/) — its bundled MySQL is all you need
+  (you don't need Apache/PHP running, just the MySQL service).
+- No IDE is required — a text editor plus the commands below are enough. (An
+  IDE like VS Code or IntelliJ works too, just point it at the `src` folder
+  and add every jar in `lib/` to the project's classpath/libraries.)
+
+### Step 1 — Get the project
+
+Make sure you have the whole `LaundrySystem` folder, including the `src/`,
+`database/`, and `lib/` subfolders (the `lib/` jars are required — the app
+will not compile or run without them).
+
+### Step 2 — Start MySQL
+
+Start MySQL from the XAMPP Control Panel (click **Start** next to *MySQL*),
+or start your standalone MySQL service if you're not using XAMPP. Leave it
+running for as long as you use the app.
+
+### Step 3 — Import the database
+
+Run the bundled schema/seed script against your MySQL server:
+
+```bash
+mysql -u root -p < database/laundry_system.sql
+```
+
+(If your `root` account has no password — the XAMPP default — just omit
+`-p`, or press Enter when prompted for a password.)
+
+If you don't have the `mysql` command-line client on your PATH, open
+**phpMyAdmin** (XAMPP's Control Panel → MySQL → Admin) or **MySQL Workbench**,
+open `database/laundry_system.sql` there, and run/execute it instead.
+
+This script drops and recreates the `laundry_system` database, creates all
+six tables (`users`, `customers`, `laundry_services`, `laundry_orders`,
+`pickup_deliveries`, `payments`), and inserts sample data plus three default
+accounts (see [Default Login Credentials](#default-login-credentials) below).
+
+### Step 4 — Check the database connection settings
+
+Connection settings live in one place:
+[src/database/DatabaseConnection.java](src/database/DatabaseConnection.java).
+
+```java
+private static final String HOST = "localhost";
+private static final String PORT = "3306";
+private static final String DATABASE = "laundry_system";
+private static final String USERNAME = "root";
+private static final String PASSWORD = "";
+```
+
+The defaults above match a stock XAMPP install, so most users can skip this
+step. If your MySQL uses a different host/port/username, or your `root`
+account has a password, edit these four constants to match, then re-save
+the file (you'll compile it in the next step).
+
+### Step 5 — Compile
+
+All required libraries are already included in `lib/` (MySQL Connector/J,
+FlatLaf, and Ikonli's core/Swing/Material-Design-2 icon pack jars), so no
+build tool (Maven/Gradle) is required — just the JDK.
+
+**Windows (PowerShell / cmd):**
+
+```powershell
+cd "LaundrySystem"
+javac -encoding UTF-8 -cp "lib/*" -d bin (Get-ChildItem -Recurse -Filter *.java src | ForEach-Object { $_.FullName })
+```
+
+**macOS / Linux:**
+
+```bash
+cd LaundrySystem
+find src -name "*.java" > sources.txt
+javac -encoding UTF-8 -cp "lib/*" -d bin @sources.txt
+```
+
+This compiles every `.java` file under `src/` into `.class` files under `bin/`
+(created automatically). Re-run this any time you change a `.java` file.
+
+### Step 6 — Run
+
+**Windows:**
+
+```powershell
+java -cp "bin;lib/*" Main
+```
+
+**macOS / Linux:**
+
+```bash
+java -cp "bin:lib/*" Main
+```
+
+The login window should appear within a couple of seconds.
+
+### Step 7 — Log in
+
+Use one of the [default accounts](#default-login-credentials) — e.g.
+`admin` / `admin123` — then explore the sidebar (Dashboard, Customers,
+Orders, Pickup & Delivery, Payments, Reports, Users, Settings).
+
+### Troubleshooting
+
+| Problem | Likely cause / fix |
+|---|---|
+| `Could not connect to the database` dialog on login | MySQL isn't running — start it from XAMPP's Control Panel — or the credentials in `DatabaseConnection.java` don't match your setup (Step 4). |
+| `Unknown database 'laundry_system'` | The schema script (Step 3) wasn't run yet, or was run against a different MySQL server than the app is pointing at. |
+| `Access denied for user 'root'@'localhost'` | Your MySQL `root` account has a password that isn't reflected in `PASSWORD` in `DatabaseConnection.java` (Step 4). |
+| `package does not exist` / `cannot find symbol` when compiling | The `-cp "lib/*"` (or `lib/*` on macOS/Linux) flag is missing or misspelled, or a jar is missing from `lib/`. |
+| `Error: Could not find or load main class Main` when running | You're running `java` from a different folder than the compiled `bin/` directory, or `-cp` doesn't include `bin`. Run the command from inside the `LaundrySystem` folder, as shown above. |
+| Login window doesn't visually update after editing a `.java` file | You edited the source but didn't recompile — repeat Step 5, then Step 6. |
+| Port 3306 already in use / MySQL won't start in XAMPP | Another MySQL instance (or a different app) is already using port 3306. Stop the other service, or change MySQL's port in XAMPP and update `PORT` in `DatabaseConnection.java` to match. |
+
 ## Technologies
 
 - Java (Swing for the GUI)
@@ -84,72 +214,6 @@ LaundrySystem/
 │   └── ikonli-materialdesign2-pack-12.4.0.jar
 ├── bin/                           # compiled .class output (created by javac)
 └── README.md
-```
-
-## Database Setup
-
-1. Make sure MySQL Server is running (e.g. via XAMPP's MySQL module, or a
-   standalone MySQL installation).
-2. Run the schema script. From a terminal with the `mysql` client on PATH:
-
-   ```bash
-   mysql -u root -p < database/laundry_system.sql
-   ```
-
-   Or open `database/laundry_system.sql` in phpMyAdmin / MySQL Workbench and
-   execute it. This drops and recreates the `laundry_system` database, creates
-   all six tables (`users`, `customers`, `laundry_services`, `laundry_orders`,
-   `pickup_deliveries`, `payments`), and inserts sample data plus three
-   default accounts.
-
-## MySQL Configuration
-
-Connection settings live in one place: [src/database/DatabaseConnection.java](src/database/DatabaseConnection.java).
-
-```java
-private static final String HOST = "localhost";
-private static final String PORT = "3306";
-private static final String DATABASE = "laundry_system";
-private static final String USERNAME = "root";
-private static final String PASSWORD = "";
-```
-
-Edit these constants to match your MySQL setup (for example, set `PASSWORD` if
-your `root` account requires one).
-
-## How to Compile
-
-All required libraries are already included in `lib/` (MySQL Connector/J,
-FlatLaf, and Ikonli's core/Swing/Material-Design-2 icon pack jars), so no
-build tool (Maven/Gradle) is required — just the JDK.
-
-**Windows (PowerShell / cmd):**
-
-```powershell
-cd "LaundrySystem"
-javac -encoding UTF-8 -cp "lib/*" -d bin (Get-ChildItem -Recurse -Filter *.java src | ForEach-Object { $_.FullName })
-```
-
-**macOS / Linux:**
-
-```bash
-cd LaundrySystem
-find src -name "*.java" > sources.txt
-javac -encoding UTF-8 -cp "lib/*" -d bin @sources.txt
-```
-
-## How to Run
-
-**Windows:**
-
-```powershell
-java -cp "bin;lib/*" Main
-```
-
-**macOS / Linux:**
-
-```bash
-java -cp "bin:lib/*" Main
 ```
 
 ## Default Login Credentials
