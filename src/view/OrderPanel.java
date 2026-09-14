@@ -3,12 +3,16 @@ package view;
 import dao.CustomerDAO;
 import dao.LaundryOrderDAO;
 import dao.LaundryServiceDAO;
+import event.DataChangeEvent;
+import event.DataChangeListener;
+import event.DataChangeManager;
 import model.Customer;
 import model.LaundryOrder;
 import model.LaundryService;
 import model.OrderStatus;
 import service.OrderService;
 import service.ValidationException;
+import view.components.Async;
 import view.components.Card;
 import view.components.Dialogs;
 import view.components.EntityFormDialog;
@@ -30,7 +34,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class OrderPanel extends JPanel {
+public class OrderPanel extends JPanel implements DataChangeListener, Refreshable {
 
     private final OrderService orderService = new OrderService();
     private final CustomerDAO customerDAO = new CustomerDAO();
@@ -71,6 +75,29 @@ public class OrderPanel extends JPanel {
         }
 
         loadOrders();
+        DataChangeManager.addListener(this);
+    }
+
+    @Override
+    public void onDataChanged(DataChangeEvent event) {
+        if (event == DataChangeEvent.ORDER_CHANGED) {
+            refreshPreservingFilter();
+        }
+    }
+
+    @Override
+    public void refreshNow() {
+        refreshPreservingFilter();
+    }
+
+    private void refreshPreservingFilter() {
+        boolean noSearch = searchField.getText().trim().isEmpty();
+        boolean noStatusFilter = "All Statuses".equals(statusFilterBox.getSelectedItem());
+        if (noSearch && noStatusFilter) {
+            loadOrders();
+        } else {
+            search();
+        }
     }
 
     private JPanel buildHeader() {
@@ -172,20 +199,16 @@ public class OrderPanel extends JPanel {
     }
 
     private void loadOrders() {
-        try {
-            populateTable(orderService.getAllOrders());
-        } catch (SQLException ex) {
-            Toast.error(this, "Failed to load orders: " + ex.getMessage());
-        }
+        Async.run(orderService::getAllOrders, this::populateTable,
+                ex -> Toast.error(this, "Failed to load orders: " + ex.getMessage()));
     }
 
     private void search() {
-        try {
-            String status = (String) statusFilterBox.getSelectedItem();
-            populateTable(orderService.search(searchField.getText(), "All Statuses".equals(status) ? "All" : status));
-        } catch (SQLException ex) {
-            Toast.error(this, "Search failed: " + ex.getMessage());
-        }
+        String keyword = searchField.getText();
+        String status = (String) statusFilterBox.getSelectedItem();
+        String statusParam = "All Statuses".equals(status) ? "All" : status;
+        Async.run(() -> orderService.search(keyword, statusParam), this::populateTable,
+                ex -> Toast.error(this, "Search failed: " + ex.getMessage()));
     }
 
     private void populateTable(List<LaundryOrder> orders) {
@@ -371,7 +394,6 @@ public class OrderPanel extends JPanel {
         dialog.showCentered(560);
         if (dialog.isSaved()) {
             Toast.success(this, editing ? "Order updated successfully." : "Order created successfully.");
-            loadOrders();
         }
     }
 
@@ -413,7 +435,6 @@ public class OrderPanel extends JPanel {
         try {
             orderService.deleteOrder(orderId);
             Toast.success(this, "Order deleted (any related pickup/delivery and payment records were removed too).");
-            loadOrders();
         } catch (SQLException ex) {
             Toast.error(this, "Failed to delete order: " + ex.getMessage());
         }

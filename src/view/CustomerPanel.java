@@ -1,8 +1,12 @@
 package view;
 
+import event.DataChangeEvent;
+import event.DataChangeListener;
+import event.DataChangeManager;
 import model.Customer;
 import service.CustomerService;
 import service.ValidationException;
+import view.components.Async;
 import view.components.Card;
 import view.components.Dialogs;
 import view.components.EntityFormDialog;
@@ -19,7 +23,7 @@ import java.sql.SQLException;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class CustomerPanel extends JPanel {
+public class CustomerPanel extends JPanel implements DataChangeListener, Refreshable {
 
     private final CustomerService customerService = new CustomerService();
     private final JTextField searchField = UITheme.searchField("Search by name or contact number...");
@@ -48,6 +52,27 @@ public class CustomerPanel extends JPanel {
         add(buildTableCard(), BorderLayout.CENTER);
 
         loadCustomers();
+        DataChangeManager.addListener(this);
+    }
+
+    @Override
+    public void onDataChanged(DataChangeEvent event) {
+        if (event == DataChangeEvent.CUSTOMER_CHANGED) {
+            refreshPreservingFilter();
+        }
+    }
+
+    @Override
+    public void refreshNow() {
+        refreshPreservingFilter();
+    }
+
+    private void refreshPreservingFilter() {
+        if (searchField.getText().trim().isEmpty()) {
+            loadCustomers();
+        } else {
+            search();
+        }
     }
 
     private JPanel buildHeader() {
@@ -144,19 +169,14 @@ public class CustomerPanel extends JPanel {
     }
 
     private void loadCustomers() {
-        try {
-            populateTable(customerService.getAllCustomers());
-        } catch (SQLException ex) {
-            Toast.error(this, "Failed to load customers: " + ex.getMessage());
-        }
+        Async.run(customerService::getAllCustomers, this::populateTable,
+                ex -> Toast.error(this, "Failed to load customers: " + ex.getMessage()));
     }
 
     private void search() {
-        try {
-            populateTable(customerService.search(searchField.getText()));
-        } catch (SQLException ex) {
-            Toast.error(this, "Search failed: " + ex.getMessage());
-        }
+        String keyword = searchField.getText();
+        Async.run(() -> customerService.search(keyword), this::populateTable,
+                ex -> Toast.error(this, "Search failed: " + ex.getMessage()));
     }
 
     private void populateTable(List<Customer> customers) {
@@ -251,7 +271,6 @@ public class CustomerPanel extends JPanel {
         dialog.showCentered(480);
         if (dialog.isSaved()) {
             Toast.success(this, editing ? "Customer updated successfully." : "Customer added successfully.");
-            loadCustomers();
         }
     }
 
@@ -268,7 +287,6 @@ public class CustomerPanel extends JPanel {
         try {
             customerService.deleteCustomer(c.getCustomerId());
             Toast.success(this, "Customer deleted.");
-            loadCustomers();
         } catch (SQLException ex) {
             Toast.error(this, "Cannot delete: this customer has existing orders, or a database error occurred.");
         }

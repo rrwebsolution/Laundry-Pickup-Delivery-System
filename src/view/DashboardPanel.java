@@ -1,8 +1,12 @@
 package view;
 
+import event.DataChangeEvent;
+import event.DataChangeListener;
+import event.DataChangeManager;
 import service.CustomerService;
 import service.OrderService;
 import service.PaymentService;
+import view.components.Async;
 import view.components.AppIcon;
 import view.components.Card;
 
@@ -10,10 +14,9 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.math.BigDecimal;
-import java.sql.SQLException;
 
 /** Summary cards shown right after login. */
-public class DashboardPanel extends JPanel {
+public class DashboardPanel extends JPanel implements DataChangeListener, Refreshable {
 
     private final CustomerService customerService = new CustomerService();
     private final OrderService orderService = new OrderService();
@@ -22,6 +25,16 @@ public class DashboardPanel extends JPanel {
     private final JPanel cardsPanel = new JPanel(new GridLayout(0, 4, UITheme.SPACE_MD, UITheme.SPACE_MD));
     private final JLabel statusLabel = UITheme.helperText(" ");
     private final JLabel welcomeLabel = UITheme.pageTitle("Welcome back");
+
+    // Built once and updated in place on every refresh, instead of being torn down and
+    // recreated, so a background poll never causes the dashboard to flicker.
+    private final JLabel totalCustomersValue;
+    private final JLabel totalOrdersValue;
+    private final JLabel pendingPickupsValue;
+    private final JLabel inProcessValue;
+    private final JLabel readyForDeliveryValue;
+    private final JLabel completedValue;
+    private final JLabel todaysRevenueValue;
 
     public DashboardPanel() {
         setLayout(new BorderLayout());
@@ -49,6 +62,20 @@ public class DashboardPanel extends JPanel {
 
         cardsPanel.setOpaque(false);
 
+        totalCustomersValue = addStatCard(AppIcon.Name.CUSTOMERS, "Total Customers", "Registered accounts",
+                UITheme.PRIMARY);
+        totalOrdersValue = addStatCard(AppIcon.Name.ORDERS, "Total Orders", "All orders placed", UITheme.SECONDARY);
+        pendingPickupsValue = addStatCard(AppIcon.Name.CLOCK, "Pending Pickups", "Awaiting rider pickup",
+                UITheme.WARNING);
+        inProcessValue = addStatCard(AppIcon.Name.SERVICES, "Laundry in Process", "Washing, drying, folding",
+                new Color(0x8B, 0x5C, 0xF6));
+        readyForDeliveryValue = addStatCard(AppIcon.Name.PICKUP_DELIVERY, "Ready for Delivery",
+                "Ready or out for delivery", new Color(0x06, 0x94, 0x8D));
+        completedValue = addStatCard(AppIcon.Name.CHECK_CIRCLE, "Completed Orders", "Successfully delivered",
+                UITheme.SUCCESS);
+        todaysRevenueValue = addStatCard(AppIcon.Name.MONEY, "Today's Revenue", "Cash collected today",
+                UITheme.DANGER);
+
         JScrollPane scrollPane = new JScrollPane(cardsPanel);
         scrollPane.setBorder(null);
         scrollPane.getViewport().setOpaque(false);
@@ -60,43 +87,64 @@ public class DashboardPanel extends JPanel {
         add(statusLabel, BorderLayout.SOUTH);
 
         refresh();
+        DataChangeManager.addListener(this);
+    }
+
+    @Override
+    public void onDataChanged(DataChangeEvent event) {
+        if (event == DataChangeEvent.CUSTOMER_CHANGED || event == DataChangeEvent.ORDER_CHANGED
+                || event == DataChangeEvent.PAYMENT_CHANGED) {
+            refresh();
+        }
+    }
+
+    @Override
+    public void refreshNow() {
+        refresh();
+    }
+
+    /** Snapshot of every figure shown on the dashboard, computed off the EDT in one background pass. */
+    private static final class Stats {
+        int totalCustomers;
+        int totalOrders;
+        int pendingPickups;
+        int inProcess;
+        int readyForDelivery;
+        int completed;
+        BigDecimal todaysRevenue;
     }
 
     public void refresh() {
-        cardsPanel.removeAll();
-        try {
-            int totalCustomers = customerService.countCustomers();
-            int totalOrders = orderService.countAll();
-            int pendingPickups = orderService.countByStatuses("Pending", "Scheduled for Pickup");
-            int inProcess = orderService.countByStatuses("Picked Up", "Washing", "Drying", "Folding");
-            int readyForDelivery = orderService.countByStatuses("Ready for Delivery", "Out for Delivery");
-            int completed = orderService.countByStatuses("Delivered");
-            BigDecimal todaysRevenue = paymentService.todaysRevenue();
-
-            cardsPanel.add(buildCard(AppIcon.Name.CUSTOMERS, String.valueOf(totalCustomers), "Total Customers",
-                    "Registered accounts", UITheme.PRIMARY));
-            cardsPanel.add(buildCard(AppIcon.Name.ORDERS, String.valueOf(totalOrders), "Total Orders",
-                    "All orders placed", UITheme.SECONDARY));
-            cardsPanel.add(buildCard(AppIcon.Name.CLOCK, String.valueOf(pendingPickups), "Pending Pickups",
-                    "Awaiting rider pickup", UITheme.WARNING));
-            cardsPanel.add(buildCard(AppIcon.Name.SERVICES, String.valueOf(inProcess), "Laundry in Process",
-                    "Washing, drying, folding", new Color(0x8B, 0x5C, 0xF6)));
-            cardsPanel.add(buildCard(AppIcon.Name.PICKUP_DELIVERY, String.valueOf(readyForDelivery), "Ready for Delivery",
-                    "Ready or out for delivery", new Color(0x06, 0x94, 0x8D)));
-            cardsPanel.add(buildCard(AppIcon.Name.CHECK_CIRCLE, String.valueOf(completed), "Completed Orders",
-                    "Successfully delivered", UITheme.SUCCESS));
-            cardsPanel.add(buildCard(AppIcon.Name.MONEY, "PHP " + todaysRevenue, "Today's Revenue",
-                    "Cash collected today", UITheme.DANGER));
-
-            statusLabel.setText(" ");
-        } catch (SQLException ex) {
-            statusLabel.setText("Failed to load dashboard data: " + ex.getMessage());
-        }
-        cardsPanel.revalidate();
-        cardsPanel.repaint();
+        Async.run(this::loadStats, this::applyStats,
+                ex -> statusLabel.setText("Failed to load dashboard data: " + ex.getMessage()));
     }
 
-    private Card buildCard(AppIcon.Name icon, String value, String label, String trend, Color accent) {
+    private Stats loadStats() throws Exception {
+        Stats stats = new Stats();
+        stats.totalCustomers = customerService.countCustomers();
+        stats.totalOrders = orderService.countAll();
+        stats.pendingPickups = orderService.countByStatuses("Pending", "Scheduled for Pickup");
+        stats.inProcess = orderService.countByStatuses("Picked Up", "Washing", "Drying", "Folding");
+        stats.readyForDelivery = orderService.countByStatuses("Ready for Delivery", "Out for Delivery");
+        stats.completed = orderService.countByStatuses("Delivered");
+        stats.todaysRevenue = paymentService.todaysRevenue();
+        return stats;
+    }
+
+    /** Updates the existing cards' labels in place - no components are destroyed or rebuilt. */
+    private void applyStats(Stats stats) {
+        totalCustomersValue.setText(String.valueOf(stats.totalCustomers));
+        totalOrdersValue.setText(String.valueOf(stats.totalOrders));
+        pendingPickupsValue.setText(String.valueOf(stats.pendingPickups));
+        inProcessValue.setText(String.valueOf(stats.inProcess));
+        readyForDeliveryValue.setText(String.valueOf(stats.readyForDelivery));
+        completedValue.setText(String.valueOf(stats.completed));
+        todaysRevenueValue.setText("PHP " + stats.todaysRevenue);
+        statusLabel.setText(" ");
+    }
+
+    /** Builds one stat card, adds it to the grid, and returns its (mutable) value label. */
+    private JLabel addStatCard(AppIcon.Name icon, String label, String trend, Color accent) {
         Card card = new Card();
         card.setLayout(new BorderLayout());
         card.setPreferredSize(new Dimension(220, 150));
@@ -117,7 +165,7 @@ public class DashboardPanel extends JPanel {
         textCol.setLayout(new BoxLayout(textCol, BoxLayout.Y_AXIS));
         textCol.setBorder(new EmptyBorder(14, 0, 0, 0));
 
-        JLabel valueLabel = new JLabel(value);
+        JLabel valueLabel = new JLabel("0");
         valueLabel.setFont(UITheme.FONT_CARD_VALUE);
         valueLabel.setForeground(UITheme.TEXT_PRIMARY);
         valueLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -139,7 +187,8 @@ public class DashboardPanel extends JPanel {
 
         card.add(iconRow, BorderLayout.NORTH);
         card.add(textCol, BorderLayout.CENTER);
-        return card;
+        cardsPanel.add(card);
+        return valueLabel;
     }
 
     private Color tint(Color color, float amount) {

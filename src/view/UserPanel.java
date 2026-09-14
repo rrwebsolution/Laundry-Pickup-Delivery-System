@@ -1,10 +1,14 @@
 package view;
 
+import event.DataChangeEvent;
+import event.DataChangeListener;
+import event.DataChangeManager;
 import model.User;
 import model.UserRole;
 import model.UserStatus;
 import service.UserManagementService;
 import service.ValidationException;
+import view.components.Async;
 import view.components.Card;
 import view.components.Dialogs;
 import view.components.EntityFormDialog;
@@ -21,7 +25,7 @@ import java.awt.*;
 import java.sql.SQLException;
 import java.util.List;
 
-public class UserPanel extends JPanel {
+public class UserPanel extends JPanel implements DataChangeListener, Refreshable {
 
     private final UserManagementService userManagementService = new UserManagementService();
 
@@ -45,6 +49,19 @@ public class UserPanel extends JPanel {
         add(buildHeader(), BorderLayout.NORTH);
         add(buildTableCard(), BorderLayout.CENTER);
 
+        loadUsers();
+        DataChangeManager.addListener(this);
+    }
+
+    @Override
+    public void onDataChanged(DataChangeEvent event) {
+        if (event == DataChangeEvent.USER_CHANGED) {
+            loadUsers();
+        }
+    }
+
+    @Override
+    public void refreshNow() {
         loadUsers();
     }
 
@@ -131,11 +148,8 @@ public class UserPanel extends JPanel {
     }
 
     private void loadUsers() {
-        try {
-            populateTable(userManagementService.getAllUsers());
-        } catch (SQLException ex) {
-            Toast.error(this, "Failed to load users: " + ex.getMessage());
-        }
+        Async.run(userManagementService::getAllUsers, this::populateTable,
+                ex -> Toast.error(this, "Failed to load users: " + ex.getMessage()));
     }
 
     private void populateTable(List<User> users) {
@@ -207,7 +221,6 @@ public class UserPanel extends JPanel {
         dialog.showCentered(500);
         if (dialog.isSaved()) {
             Toast.success(this, editing ? "User updated successfully." : "User added successfully.");
-            loadUsers();
         }
     }
 
@@ -224,7 +237,6 @@ public class UserPanel extends JPanel {
         try {
             userManagementService.deleteUser(user.getUserId());
             Toast.success(this, "User deleted.");
-            loadUsers();
         } catch (SQLException ex) {
             Toast.error(this, "Failed to delete user: " + ex.getMessage());
         }

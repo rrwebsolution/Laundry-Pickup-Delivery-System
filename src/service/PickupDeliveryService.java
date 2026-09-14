@@ -2,6 +2,8 @@ package service;
 
 import dao.LaundryOrderDAO;
 import dao.PickupDeliveryDAO;
+import event.DataChangeEvent;
+import event.DataChangeManager;
 import model.PickupDelivery;
 
 import java.sql.SQLException;
@@ -18,7 +20,9 @@ public class PickupDeliveryService {
 
     public int schedule(PickupDelivery pd) throws ValidationException, SQLException {
         validate(pd);
-        return pickupDeliveryDAO.create(pd);
+        int id = pickupDeliveryDAO.create(pd);
+        DataChangeManager.notifyListeners(DataChangeEvent.PICKUP_DELIVERY_CHANGED);
+        return id;
     }
 
     public void update(PickupDelivery pd) throws ValidationException, SQLException {
@@ -27,10 +31,12 @@ public class PickupDeliveryService {
             throw new ValidationException("Select a pickup/delivery record from the table before updating.");
         }
         pickupDeliveryDAO.update(pd);
+        DataChangeManager.notifyListeners(DataChangeEvent.PICKUP_DELIVERY_CHANGED);
     }
 
     public void delete(int transactionId) throws SQLException {
         pickupDeliveryDAO.delete(transactionId);
+        DataChangeManager.notifyListeners(DataChangeEvent.PICKUP_DELIVERY_CHANGED);
     }
 
     public int countByStatus(String status) throws SQLException {

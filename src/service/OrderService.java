@@ -3,6 +3,8 @@ package service;
 import dao.CustomerDAO;
 import dao.LaundryOrderDAO;
 import dao.LaundryServiceDAO;
+import event.DataChangeEvent;
+import event.DataChangeManager;
 import model.LaundryOrder;
 import model.LaundryService;
 import model.OrderStatus;
@@ -45,7 +47,9 @@ public class OrderService {
         if (order.getStatus() == null) {
             order.setStatus(OrderStatus.PENDING);
         }
-        return orderDAO.create(order);
+        int id = orderDAO.create(order);
+        DataChangeManager.notifyListeners(DataChangeEvent.ORDER_CHANGED);
+        return id;
     }
 
     public void updateOrder(LaundryOrder order) throws ValidationException, SQLException {
@@ -55,14 +59,20 @@ public class OrderService {
             throw new ValidationException("Select an order from the table before updating.");
         }
         orderDAO.update(order);
+        DataChangeManager.notifyListeners(DataChangeEvent.ORDER_CHANGED);
     }
 
     public void updateStatus(int orderId, OrderStatus status) throws SQLException {
         orderDAO.updateStatus(orderId, status);
+        DataChangeManager.notifyListeners(DataChangeEvent.ORDER_CHANGED);
     }
 
+    /** Deleting an order also cascades to its pickup/delivery and payment records in the database. */
     public void deleteOrder(int orderId) throws SQLException {
         orderDAO.delete(orderId);
+        DataChangeManager.notifyListeners(DataChangeEvent.ORDER_CHANGED);
+        DataChangeManager.notifyListeners(DataChangeEvent.PICKUP_DELIVERY_CHANGED);
+        DataChangeManager.notifyListeners(DataChangeEvent.PAYMENT_CHANGED);
     }
 
     public int countAll() throws SQLException {

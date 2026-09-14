@@ -1,11 +1,15 @@
 package view;
 
 import dao.LaundryOrderDAO;
+import event.DataChangeEvent;
+import event.DataChangeListener;
+import event.DataChangeManager;
 import model.LaundryOrder;
 import model.Payment;
 import model.PaymentMethod;
 import service.PaymentService;
 import service.ValidationException;
+import view.components.Async;
 import view.components.Card;
 import view.components.Dialogs;
 import view.components.AppIcon;
@@ -24,7 +28,7 @@ import java.sql.SQLException;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class PaymentPanel extends JPanel {
+public class PaymentPanel extends JPanel implements DataChangeListener, Refreshable {
 
     private final PaymentService paymentService = new PaymentService();
     private final LaundryOrderDAO orderDAO = new LaundryOrderDAO();
@@ -52,6 +56,19 @@ public class PaymentPanel extends JPanel {
         add(buildHeader(), BorderLayout.NORTH);
         add(buildTableCard(), BorderLayout.CENTER);
 
+        loadPayments();
+        DataChangeManager.addListener(this);
+    }
+
+    @Override
+    public void onDataChanged(DataChangeEvent event) {
+        if (event == DataChangeEvent.PAYMENT_CHANGED) {
+            loadPayments();
+        }
+    }
+
+    @Override
+    public void refreshNow() {
         loadPayments();
     }
 
@@ -129,11 +146,8 @@ public class PaymentPanel extends JPanel {
     }
 
     private void loadPayments() {
-        try {
-            populateTable(paymentService.getAll());
-        } catch (SQLException ex) {
-            Toast.error(this, "Failed to load payments: " + ex.getMessage());
-        }
+        Async.run(paymentService::getAll, this::populateTable,
+                ex -> Toast.error(this, "Failed to load payments: " + ex.getMessage()));
     }
 
     private void populateTable(List<Payment> payments) {
@@ -294,6 +308,7 @@ public class PaymentPanel extends JPanel {
         JButton saveButton = UITheme.primaryButton(AppIcon.Name.SAVE, editing ? "Save Changes" : "Record Payment");
         cancelButton.addActionListener(e -> dialog.dispose());
         boolean[] saved = {false};
+        String originalSaveLabel = saveButton.getText();
         saveButton.addActionListener(e -> {
             LaundryOrder order = (LaundryOrder) orderBox.getSelectedItem();
             if (order == null) {
@@ -310,6 +325,8 @@ public class PaymentPanel extends JPanel {
                 return;
             }
             payment.setPaymentMethod((PaymentMethod) methodBox.getSelectedItem());
+            saveButton.setEnabled(false);
+            saveButton.setText("Saving...");
             try {
                 if (editing) {
                     payment.setPaymentId(existingPayment.getPaymentId());
@@ -323,6 +340,11 @@ public class PaymentPanel extends JPanel {
                 Toast.warning(this, ex.getMessage());
             } catch (SQLException ex) {
                 Toast.error(this, "Database error: " + ex.getMessage());
+            } finally {
+                if (!saved[0]) {
+                    saveButton.setEnabled(true);
+                    saveButton.setText(originalSaveLabel);
+                }
             }
         });
 
@@ -353,7 +375,6 @@ public class PaymentPanel extends JPanel {
 
         if (saved[0]) {
             Toast.success(this, editing ? "Payment updated successfully." : "Payment recorded successfully.");
-            loadPayments();
         }
     }
 
@@ -387,7 +408,6 @@ public class PaymentPanel extends JPanel {
         try {
             paymentService.deletePayment(paymentId);
             Toast.success(this, "Payment deleted.");
-            loadPayments();
         } catch (SQLException ex) {
             Toast.error(this, "Failed to delete payment: " + ex.getMessage());
         }

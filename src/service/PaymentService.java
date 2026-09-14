@@ -2,6 +2,8 @@ package service;
 
 import dao.LaundryOrderDAO;
 import dao.PaymentDAO;
+import event.DataChangeEvent;
+import event.DataChangeManager;
 import model.Payment;
 
 import java.math.BigDecimal;
@@ -22,7 +24,9 @@ public class PaymentService {
         validate(payment);
         payment.setChangeAmount(Payment.calculateChange(payment.getAmountPaid(), payment.getTotalAmount()));
         payment.setPaymentStatus(Payment.determineStatus(payment.getAmountPaid(), payment.getTotalAmount()));
-        return paymentDAO.create(payment);
+        int id = paymentDAO.create(payment);
+        DataChangeManager.notifyListeners(DataChangeEvent.PAYMENT_CHANGED);
+        return id;
     }
 
     public void updatePayment(Payment payment) throws ValidationException, SQLException {
@@ -33,10 +37,12 @@ public class PaymentService {
             throw new ValidationException("Select a payment record from the table before updating.");
         }
         paymentDAO.update(payment);
+        DataChangeManager.notifyListeners(DataChangeEvent.PAYMENT_CHANGED);
     }
 
     public void deletePayment(int paymentId) throws SQLException {
         paymentDAO.delete(paymentId);
+        DataChangeManager.notifyListeners(DataChangeEvent.PAYMENT_CHANGED);
     }
 
     public BigDecimal todaysRevenue() throws SQLException {

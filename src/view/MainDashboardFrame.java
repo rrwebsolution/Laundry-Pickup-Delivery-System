@@ -1,5 +1,6 @@
 package view;
 
+import event.DataChangeManager;
 import model.User;
 import model.UserRole;
 import view.components.AppIcon;
@@ -13,13 +14,22 @@ import java.awt.*;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Main application window: fixed sidebar + top header + CardLayout content area. */
+/**
+ * Main application window: fixed sidebar + top header + CardLayout content area.
+ * Also owns the lifecycle of {@link DataChangeManager}: listeners are cleared and re-registered
+ * (by each panel, in its own constructor) every time this window is built, and the background
+ * poll starts once every panel is in place, so the whole GUI stays in sync with the database
+ * without manual refreshes.
+ */
 public class MainDashboardFrame extends JFrame {
+
+    private static final int POLL_INTERVAL_MS = 5000;
 
     private final User currentUser;
     private final CardLayout cardLayout = new CardLayout();
     private final JPanel contentPanel = new JPanel(cardLayout);
     private final Map<String, SidebarButton> navButtons = new LinkedHashMap<>();
+    private final Map<String, JComponent> cardPanels = new LinkedHashMap<>();
     private final JLabel headerTitle = new JLabel();
     private DashboardPanel dashboardPanel;
 
@@ -36,6 +46,7 @@ public class MainDashboardFrame extends JFrame {
     };
 
     public MainDashboardFrame(User currentUser) {
+        DataChangeManager.reset();
         this.currentUser = currentUser;
         setTitle("Laundry Pickup and Delivery Management System");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -54,6 +65,7 @@ public class MainDashboardFrame extends JFrame {
         add(right, BorderLayout.CENTER);
 
         showCard("Dashboard");
+        DataChangeManager.startPolling(POLL_INTERVAL_MS);
     }
 
     private JPanel buildSidebar() {
@@ -206,19 +218,24 @@ public class MainDashboardFrame extends JFrame {
 
     private JPanel buildContent() {
         dashboardPanel = new DashboardPanel();
-        contentPanel.add(dashboardPanel, "Dashboard");
-        contentPanel.add(new CustomerPanel(), "Customers");
-        contentPanel.add(new ServicePanel(currentUser), "Laundry Services");
-        contentPanel.add(new OrderPanel(), "Orders");
-        contentPanel.add(new PickupDeliveryPanel(), "Pickup & Delivery");
-        contentPanel.add(new PaymentPanel(), "Payments");
-        contentPanel.add(new ReportsPanel(), "Reports");
+        addCard("Dashboard", dashboardPanel);
+        addCard("Customers", new CustomerPanel());
+        addCard("Laundry Services", new ServicePanel(currentUser));
+        addCard("Orders", new OrderPanel());
+        addCard("Pickup & Delivery", new PickupDeliveryPanel());
+        addCard("Payments", new PaymentPanel());
+        addCard("Reports", new ReportsPanel());
         if (currentUser.getRole() == UserRole.ADMINISTRATOR) {
-            contentPanel.add(new UserPanel(), "Users");
+            addCard("Users", new UserPanel());
         }
-        contentPanel.add(new SettingsPanel(currentUser), "Settings");
+        addCard("Settings", new SettingsPanel(currentUser));
         contentPanel.setBackground(UITheme.BACKGROUND);
         return contentPanel;
+    }
+
+    private void addCard(String name, JComponent panel) {
+        cardPanels.put(name, panel);
+        contentPanel.add(panel, name);
     }
 
     private void showCard(String name) {
@@ -226,8 +243,9 @@ public class MainDashboardFrame extends JFrame {
             entry.getValue().setActive(entry.getKey().equals(name));
         }
         headerTitle.setText(name);
-        if (name.equals("Dashboard") && dashboardPanel != null) {
-            dashboardPanel.refresh();
+        JComponent card = cardPanels.get(name);
+        if (card instanceof Refreshable) {
+            ((Refreshable) card).refreshNow();
         }
         cardLayout.show(contentPanel, name);
     }

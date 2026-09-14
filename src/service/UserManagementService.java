@@ -1,6 +1,8 @@
 package service;
 
 import dao.UserDAO;
+import event.DataChangeEvent;
+import event.DataChangeManager;
 import model.User;
 import model.UserFactory;
 import model.UserRole;
@@ -27,7 +29,9 @@ public class UserManagementService {
         }
         User user = UserFactory.create(0, fullName.trim(), username.trim(), PasswordUtil.hash(plainPassword), role,
                 status, LocalDateTime.now());
-        return userDAO.create(user);
+        int id = userDAO.create(user);
+        DataChangeManager.notifyListeners(DataChangeEvent.USER_CHANGED);
+        return id;
     }
 
     /** Updates a user; pass null/blank plainPassword to keep the existing password unchanged. */
@@ -48,10 +52,12 @@ public class UserManagementService {
         User updated = UserFactory.create(existing.getUserId(), existing.getFullName(), existing.getUsername(),
                 existing.getPasswordHash(), role, existing.getStatus(), existing.getDateCreated());
         userDAO.update(updated);
+        DataChangeManager.notifyListeners(DataChangeEvent.USER_CHANGED);
     }
 
     public void deleteUser(int userId) throws SQLException {
         userDAO.delete(userId);
+        DataChangeManager.notifyListeners(DataChangeEvent.USER_CHANGED);
     }
 
     private void validate(String fullName, String username, String plainPassword) throws ValidationException {

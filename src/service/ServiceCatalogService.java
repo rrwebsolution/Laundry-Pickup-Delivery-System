@@ -1,6 +1,8 @@
 package service;
 
 import dao.LaundryServiceDAO;
+import event.DataChangeEvent;
+import event.DataChangeManager;
 import model.LaundryService;
 
 import java.math.BigDecimal;
@@ -18,7 +20,9 @@ public class ServiceCatalogService {
 
     public int addService(LaundryService service) throws ValidationException, SQLException {
         validate(service);
-        return serviceDAO.create(service);
+        int id = serviceDAO.create(service);
+        DataChangeManager.notifyListeners(DataChangeEvent.SERVICE_CHANGED);
+        return id;
     }
 
     public void updateService(LaundryService service) throws ValidationException, SQLException {
@@ -27,10 +31,12 @@ public class ServiceCatalogService {
             throw new ValidationException("Select a service from the table before updating.");
         }
         serviceDAO.update(service);
+        DataChangeManager.notifyListeners(DataChangeEvent.SERVICE_CHANGED);
     }
 
     public void deleteService(int serviceId) throws SQLException {
         serviceDAO.delete(serviceId);
+        DataChangeManager.notifyListeners(DataChangeEvent.SERVICE_CHANGED);
     }
 
     private void validate(LaundryService service) throws ValidationException {

@@ -1,24 +1,28 @@
 package view;
 
+import event.DataChangeEvent;
+import event.DataChangeListener;
+import event.DataChangeManager;
 import model.LaundryOrder;
 import model.Payment;
 import model.PickupDelivery;
 import service.ReportService;
+import view.components.Async;
 import view.components.Card;
 import view.components.AppIcon;
 import view.components.StatusCellRenderer;
+import view.components.Toast;
 import view.components.ZebraRowRenderer;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class ReportsPanel extends JPanel {
+public class ReportsPanel extends JPanel implements DataChangeListener, Refreshable {
 
     private final ReportService reportService = new ReportService();
 
@@ -114,6 +118,20 @@ public class ReportsPanel extends JPanel {
         monthField.setText(String.valueOf(LocalDate.now().getMonthValue()));
 
         generateReport();
+        DataChangeManager.addListener(this);
+    }
+
+    @Override
+    public void onDataChanged(DataChangeEvent event) {
+        if (event == DataChangeEvent.ORDER_CHANGED || event == DataChangeEvent.PICKUP_DELIVERY_CHANGED
+                || event == DataChangeEvent.PAYMENT_CHANGED) {
+            generateReport();
+        }
+    }
+
+    @Override
+    public void refreshNow() {
+        generateReport();
     }
 
     private Card buildControls() {
@@ -156,46 +174,57 @@ public class ReportsPanel extends JPanel {
     private void generateReport() {
         String type = (String) reportTypeBox.getSelectedItem();
         revenueCard.setVisible(false);
+
         try {
             switch (type) {
-                case "Daily Orders":
-                    showOrders(reportService.dailyOrders(parseDate()));
+                case "Daily Orders": {
+                    LocalDate date = parseDate();
+                    Async.run(() -> reportService.dailyOrders(date), this::showOrders, this::showLoadError);
                     break;
+                }
                 case "Completed Orders":
-                    showOrders(reportService.completedOrders());
+                    Async.run(reportService::completedOrders, this::showOrders, this::showLoadError);
                     break;
                 case "Pending Orders":
-                    showOrders(reportService.pendingOrders());
+                    Async.run(reportService::pendingOrders, this::showOrders, this::showLoadError);
                     break;
                 case "Pickup/Delivery Records":
-                    showPickupDeliveries(reportService.pickupDeliveryRecords());
+                    Async.run(reportService::pickupDeliveryRecords, this::showPickupDeliveries, this::showLoadError);
                     break;
                 case "Payment Records":
-                    showPayments(reportService.paymentRecords());
+                    Async.run(reportService::paymentRecords, this::showPayments, this::showLoadError);
                     break;
-                case "Daily Revenue":
+                case "Daily Revenue": {
+                    LocalDate date = parseDate();
                     tableModel.setDataVector(new Object[0][0], new Object[0]);
-                    revenueValue.setText("PHP " + reportService.dailyRevenue(parseDate()) + "  (" + parseDate() + ")");
-                    revenueCard.setVisible(true);
+                    Async.run(() -> reportService.dailyRevenue(date),
+                            revenue -> showRevenue(revenue, date.toString()), this::showLoadError);
                     break;
-                case "Monthly Revenue":
+                }
+                case "Monthly Revenue": {
                     tableModel.setDataVector(new Object[0][0], new Object[0]);
                     int year = Integer.parseInt(yearField.getText().trim());
                     int month = Integer.parseInt(monthField.getText().trim());
-                    revenueValue.setText("PHP " + reportService.monthlyRevenue(year, month) + "  ("
-                            + year + "-" + String.format("%02d", month) + ")");
-                    revenueCard.setVisible(true);
+                    String label = year + "-" + String.format("%02d", month);
+                    Async.run(() -> reportService.monthlyRevenue(year, month),
+                            revenue -> showRevenue(revenue, label), this::showLoadError);
                     break;
+                }
                 default:
                     break;
             }
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Failed to generate report: " + ex.getMessage(), "Error",
-                    JOptionPane.ERROR_MESSAGE);
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Invalid input: " + ex.getMessage(), "Error",
-                    JOptionPane.ERROR_MESSAGE);
+            Toast.error(this, "Invalid input: " + ex.getMessage());
         }
+    }
+
+    private void showLoadError(Exception ex) {
+        Toast.error(this, "Failed to generate report: " + ex.getMessage());
+    }
+
+    private void showRevenue(java.math.BigDecimal revenue, String periodLabel) {
+        revenueValue.setText("PHP " + revenue + "  (" + periodLabel + ")");
+        revenueCard.setVisible(true);
         revalidate();
         repaint();
     }
@@ -209,6 +238,8 @@ public class ReportsPanel extends JPanel {
             table.getColumnModel().getColumn(i)
                     .setCellRenderer(i == statusColumnIndex ? new StatusCellRenderer() : new ZebraRowRenderer());
         }
+        revalidate();
+        repaint();
     }
 
     private void showOrders(List<LaundryOrder> orders) {

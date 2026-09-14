@@ -1,11 +1,15 @@
 package view;
 
+import event.DataChangeEvent;
+import event.DataChangeListener;
+import event.DataChangeManager;
 import model.LaundryService;
 import model.PricingType;
 import model.User;
 import model.UserRole;
 import service.ServiceCatalogService;
 import service.ValidationException;
+import view.components.Async;
 import view.components.Card;
 import view.components.Dialogs;
 import view.components.EntityFormDialog;
@@ -22,7 +26,7 @@ import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.List;
 
-public class ServicePanel extends JPanel {
+public class ServicePanel extends JPanel implements DataChangeListener, Refreshable {
 
     private final ServiceCatalogService serviceCatalogService = new ServiceCatalogService();
     private final boolean canEdit;
@@ -49,6 +53,19 @@ public class ServicePanel extends JPanel {
         add(buildHeader(), BorderLayout.NORTH);
         add(buildTableCard(), BorderLayout.CENTER);
 
+        loadServices();
+        DataChangeManager.addListener(this);
+    }
+
+    @Override
+    public void onDataChanged(DataChangeEvent event) {
+        if (event == DataChangeEvent.SERVICE_CHANGED) {
+            loadServices();
+        }
+    }
+
+    @Override
+    public void refreshNow() {
         loadServices();
     }
 
@@ -128,11 +145,8 @@ public class ServicePanel extends JPanel {
     }
 
     private void loadServices() {
-        try {
-            populateTable(serviceCatalogService.getAllServices());
-        } catch (SQLException ex) {
-            Toast.error(this, "Failed to load services: " + ex.getMessage());
-        }
+        Async.run(serviceCatalogService::getAllServices, this::populateTable,
+                ex -> Toast.error(this, "Failed to load services: " + ex.getMessage()));
     }
 
     private void populateTable(List<LaundryService> services) {
@@ -219,7 +233,6 @@ public class ServicePanel extends JPanel {
         dialog.showCentered(460);
         if (dialog.isSaved()) {
             Toast.success(this, editing ? "Service updated successfully." : "Service added successfully.");
-            loadServices();
         }
     }
 
@@ -236,7 +249,6 @@ public class ServicePanel extends JPanel {
         try {
             serviceCatalogService.deleteService(s.getServiceId());
             Toast.success(this, "Service deleted.");
-            loadServices();
         } catch (SQLException ex) {
             Toast.error(this, "Cannot delete: this service is used by existing orders, or a database error occurred.");
         }

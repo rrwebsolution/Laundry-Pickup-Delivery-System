@@ -2,6 +2,9 @@ package view;
 
 import dao.LaundryOrderDAO;
 import dao.UserDAO;
+import event.DataChangeEvent;
+import event.DataChangeListener;
+import event.DataChangeManager;
 import model.LaundryOrder;
 import model.PickupDelivery;
 import model.PickupDeliveryStatus;
@@ -11,6 +14,7 @@ import model.User;
 import model.UserRole;
 import service.PickupDeliveryService;
 import service.ValidationException;
+import view.components.Async;
 import view.components.Card;
 import view.components.Dialogs;
 import view.components.EntityFormDialog;
@@ -30,7 +34,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class PickupDeliveryPanel extends JPanel {
+public class PickupDeliveryPanel extends JPanel implements DataChangeListener, Refreshable {
 
     private final PickupDeliveryService pickupDeliveryService = new PickupDeliveryService();
     private final LaundryOrderDAO orderDAO = new LaundryOrderDAO();
@@ -62,6 +66,19 @@ public class PickupDeliveryPanel extends JPanel {
         add(buildHeader(), BorderLayout.NORTH);
         add(buildTableCard(), BorderLayout.CENTER);
 
+        loadRecords();
+        DataChangeManager.addListener(this);
+    }
+
+    @Override
+    public void onDataChanged(DataChangeEvent event) {
+        if (event == DataChangeEvent.PICKUP_DELIVERY_CHANGED) {
+            loadRecords();
+        }
+    }
+
+    @Override
+    public void refreshNow() {
         loadRecords();
     }
 
@@ -142,11 +159,8 @@ public class PickupDeliveryPanel extends JPanel {
     }
 
     private void loadRecords() {
-        try {
-            populateTable(pickupDeliveryService.getAll());
-        } catch (SQLException ex) {
-            Toast.error(this, "Failed to load pickup/delivery records: " + ex.getMessage());
-        }
+        Async.run(pickupDeliveryService::getAll, this::populateTable,
+                ex -> Toast.error(this, "Failed to load pickup/delivery records: " + ex.getMessage()));
     }
 
     private void populateTable(List<PickupDelivery> records) {
@@ -294,7 +308,6 @@ public class PickupDeliveryPanel extends JPanel {
         dialog.showCentered(520);
         if (dialog.isSaved()) {
             Toast.success(this, editing ? "Record updated successfully." : "Pickup/Delivery scheduled successfully.");
-            loadRecords();
         }
     }
 
@@ -334,7 +347,6 @@ public class PickupDeliveryPanel extends JPanel {
         try {
             pickupDeliveryService.delete(transactionId);
             Toast.success(this, "Record deleted.");
-            loadRecords();
         } catch (SQLException ex) {
             Toast.error(this, "Failed to delete record: " + ex.getMessage());
         }

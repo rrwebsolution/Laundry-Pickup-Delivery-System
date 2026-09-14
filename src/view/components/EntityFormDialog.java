@@ -72,10 +72,20 @@ public class EntityFormDialog extends JDialog {
         for (var l : saveButtonRef.getActionListeners()) {
             saveButtonRef.removeActionListener(l);
         }
+        String originalLabel = saveButtonRef.getText();
         saveButtonRef.addActionListener(e -> {
-            if (validatorAndSaver.getAsBoolean()) {
-                saved = true;
-                dispose();
+            saveButtonRef.setEnabled(false);
+            saveButtonRef.setText("Saving...");
+            try {
+                if (validatorAndSaver.getAsBoolean()) {
+                    saved = true;
+                    dispose();
+                }
+            } finally {
+                if (!saved) {
+                    saveButtonRef.setEnabled(true);
+                    saveButtonRef.setText(originalLabel);
+                }
             }
         });
     }

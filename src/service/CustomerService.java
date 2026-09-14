@@ -1,6 +1,8 @@
 package service;
 
 import dao.CustomerDAO;
+import event.DataChangeEvent;
+import event.DataChangeManager;
 import model.Customer;
 
 import java.sql.SQLException;
@@ -26,7 +28,9 @@ public class CustomerService {
 
     public int addCustomer(Customer customer) throws ValidationException, SQLException {
         validate(customer);
-        return customerDAO.create(customer);
+        int id = customerDAO.create(customer);
+        DataChangeManager.notifyListeners(DataChangeEvent.CUSTOMER_CHANGED);
+        return id;
     }
 
     public void updateCustomer(Customer customer) throws ValidationException, SQLException {
@@ -35,10 +39,12 @@ public class CustomerService {
             throw new ValidationException("Select a customer from the table before updating.");
         }
         customerDAO.update(customer);
+        DataChangeManager.notifyListeners(DataChangeEvent.CUSTOMER_CHANGED);
     }
 
     public void deleteCustomer(int customerId) throws SQLException {
         customerDAO.delete(customerId);
+        DataChangeManager.notifyListeners(DataChangeEvent.CUSTOMER_CHANGED);
     }
 
     public int countCustomers() throws SQLException {
