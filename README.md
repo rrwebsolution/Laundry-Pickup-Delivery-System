@@ -45,20 +45,72 @@ XAMPP, but the Linux/macOS equivalents are noted where they differ.
 
 ### Prerequisites
 
-- **JDK 17 or newer** (any recent JDK works; this project was built/tested on
-  JDK 26). Check with:
-
-  ```powershell
-  java -version
-  javac -version
-  ```
-
+- **JDK 17 or newer** (JDK 21 LTS recommended; this project was also
+  built/tested on JDK 26 — any recent JDK works). See
+  [0. Install Java JDK](#0-install-java-jdk--vs-code-first-time-setup) below
+  if you don't have one yet.
 - **MySQL Server**, running and reachable. The easiest option on Windows is
   [XAMPP](https://www.apachefriends.org/) — its bundled MySQL is all you need
   (you don't need Apache/PHP running, just the MySQL service).
-- No IDE is required — a text editor plus the commands below are enough. (An
-  IDE like VS Code or IntelliJ works too, just point it at the `src` folder
-  and add every jar in `lib/` to the project's classpath/libraries.)
+- No IDE is required — a text editor plus the commands below are enough. VS
+  Code is a good free option if you don't already have one set up — see below.
+
+### 0. Install Java JDK + VS Code (first-time setup)
+
+Skip this section if you already have a JDK and an editor/IDE installed and
+working — jump straight to [Step 1](#step-1--get-the-project).
+
+**a) Install the Java JDK**
+
+1. Go to [Oracle Java Downloads](https://www.oracle.com/java/technologies/downloads/)
+   and pick **Java 21 → Windows → x64 Installer**.
+2. Download and run the installer. The default settings are fine for
+   almost everyone — just keep clicking Next.
+
+**b) Verify the installation**
+
+Open Command Prompt (or the VS Code terminal) and run:
+
+```powershell
+java -version
+javac -version
+```
+
+You should see output similar to:
+
+```text
+java version "21..."
+javac 21...
+```
+
+If both commands print a version number like that, your JDK is installed
+correctly. (If you see "not recognized as an internal or external command",
+close and reopen your terminal first — if it still fails, the installer may
+not have added Java to your PATH; reinstall and make sure that option is
+checked, or add it manually.)
+
+**c) Install VS Code**
+
+If you already have VS Code, skip this. Otherwise, download and install it
+from [code.visualstudio.com](https://code.visualstudio.com/).
+
+**d) Install the Java extension pack for VS Code**
+
+1. Open VS Code and press `Ctrl+Shift+X` to open the Extensions panel.
+2. Search for **Extension Pack for Java**.
+3. Install **Extension Pack for Java** by Microsoft.
+
+This bundles the extensions you need for Java development, debugging, and
+project management inside VS Code (you won't need to install them one by one).
+
+**e) Try it out**
+
+Create a folder for your projects, e.g. `C:\Projects\LaundrySystem`, then in
+VS Code use **File → Open Folder...** and select it. Once your `LaundrySystem`
+project files are inside that folder, you can either use VS Code's integrated
+terminal to run the `javac`/`java` commands from [Step 5](#step-5--compile)
+and [Step 6](#step-6--run) below, or install the Java extension pack's Run
+button once the project is open — both work the same way.
 
 ### Step 1 — Get the project
 
